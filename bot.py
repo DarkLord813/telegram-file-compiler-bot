@@ -1,12 +1,11 @@
 import os
-import tempfile
 import logging
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, filters, ContextTypes
 
-from .config import Config
-from .utils import format_file_size, safe_filename, cleanup_old_files
-from .archive_manager import ArchiveManager
+import config
+import utils
+import archive_manager
 
 logger = logging.getLogger(__name__)
 
@@ -17,8 +16,8 @@ class FileCompilationBot:
     
     def setup_directories(self):
         """Create necessary directories"""
-        os.makedirs(Config.TEMP_DIR, exist_ok=True)
-        cleanup_old_files(Config.TEMP_DIR)
+        utils.ensure_directory(config.TEMP_DIR)
+        utils.cleanup_old_files(config.TEMP_DIR)
     
     def get_main_keyboard(self):
         """Create the main inline keyboard"""
@@ -33,7 +32,7 @@ class FileCompilationBot:
     
     def get_archive_format_keyboard(self):
         """Create keyboard for archive format selection"""
-        supported_formats = ArchiveManager.get_supported_formats()
+        supported_formats = archive_manager.ArchiveManager.get_supported_formats()
         keyboard = []
         
         for format_key, format_desc in supported_formats.items():
@@ -110,8 +109,8 @@ Use the buttons below to manage your files!
     
     def initialize_user_session(self, user_id: int):
         """Initialize or reinitialize user session"""
-        user_temp_dir = os.path.join(Config.TEMP_DIR, f"user_{user_id}")
-        os.makedirs(user_temp_dir, exist_ok=True)
+        user_temp_dir = os.path.join(config.TEMP_DIR, f"user_{user_id}")
+        utils.ensure_directory(user_temp_dir)
         
         self.user_sessions[user_id] = {
             'files': [],
@@ -161,7 +160,7 @@ Use the buttons below to manage your files!
     
     async def handle_show_archive_options(self, query):
         """Show available archive formats"""
-        supported_formats = ArchiveManager.get_supported_formats()
+        supported_formats = archive_manager.ArchiveManager.get_supported_formats()
         formats_text = "\n".join([f"• **{key.upper()}** - {desc}" for key, desc in supported_formats.items()])
         
         message = f"""
@@ -182,7 +181,7 @@ Choose a format to create your archive:
         """Show extraction options"""
         user_id = query.from_user.id
         archive_files = [f for f in self.user_sessions[user_id]['files'] 
-                        if ArchiveManager.can_extract_archive(f['name'])]
+                        if archive_manager.ArchiveManager.can_extract_archive(f['name'])]
         
         message = f"""
 📁 **Archive Extraction**
@@ -224,7 +223,7 @@ You can:
 **Files to include ({len(files)}):**
 {file_list}
 
-**Archive size:** {format_file_size(total_size)}
+**Archive size:** {utils.format_file_size(total_size)}
 
 Are you sure you want to create the {format_type.upper()} archive?
         """
@@ -239,7 +238,7 @@ Are you sure you want to create the {format_type.upper()} archive?
         """Handle extract all archives request"""
         user_id = query.from_user.id
         archive_files = [f for f in self.user_sessions[user_id]['files'] 
-                        if ArchiveManager.can_extract_archive(f['name'])]
+                        if archive_manager.ArchiveManager.can_extract_archive(f['name'])]
         
         if not archive_files:
             await query.edit_message_text(
@@ -270,12 +269,12 @@ Continue?
         """List extractable archive files"""
         user_id = query.from_user.id
         archive_files = [f for f in self.user_sessions[user_id]['files'] 
-                        if ArchiveManager.can_extract_archive(f['name'])]
+                        if archive_manager.ArchiveManager.can_extract_archive(f['name'])]
         
         if not archive_files:
             message = "📭 No extractable archives found.\n\nSend me APK, ZIP, 7Z, or TAR files to extract them!"
         else:
-            archive_list = "\n".join([f"• {f['name']} ({format_file_size(f['size'])})" for f in archive_files])
+            archive_list = "\n".join([f"• {f['name']} ({utils.format_file_size(f['size'])})" for f in archive_files])
             message = f"""
 📋 **Extractable Archives** ({len(archive_files)} files)
 
@@ -381,7 +380,7 @@ Use "Extract All Archives" to extract all of these at once!
         archive_name = f"compiled_files_{user_id}_{len(files)}files.{format_type}"
         archive_path = os.path.join(temp_dir, archive_name)
         
-        success = await ArchiveManager.compile_archive(files, archive_path, format_type)
+        success = await archive_manager.ArchiveManager.compile_archive(files, archive_path, format_type)
         return archive_path if success else None
     
     async def extract_all_archives(self, user_id: int) -> int:
@@ -390,22 +389,22 @@ Use "Extract All Archives" to extract all of these at once!
         files = user_session['files']
         temp_dir = user_session['temp_dir']
         
-        extractable_files = [f for f in files if ArchiveManager.can_extract_archive(f['name'])]
+        extractable_files = [f for f in files if archive_manager.ArchiveManager.can_extract_archive(f['name'])]
         total_extracted = 0
         
         for archive_file in extractable_files:
             try:
                 # Create extraction directory
                 extract_dir = os.path.join(temp_dir, f"extracted_{os.path.splitext(archive_file['name'])[0]}")
-                os.makedirs(extract_dir, exist_ok=True)
+                utils.ensure_directory(extract_dir)
                 
                 # Extract archive
-                extracted_files = await ArchiveManager.extract_archive(archive_file['path'], extract_dir)
+                extracted_files = await archive_manager.ArchiveManager.extract_archive(archive_file['path'], extract_dir)
                 
                 # Add extracted files to user's file list
                 for extracted_file in extracted_files:
                     # Check file limit
-                    if len(user_session['files']) >= Config.MAX_FILES_PER_USER:
+                    if len(user_session['files']) >= config.MAX_FILES_PER_USER:
                         break
                     
                     user_session['files'].append({
@@ -421,8 +420,103 @@ Use "Extract All Archives" to extract all of these at once!
         
         return total_extracted
 
-    # ... (keep the existing handle_list_files, handle_clear_files, handle_show_help, handle_back_to_main methods)
+    async def handle_list_files(self, query):
+        """List all stored files"""
+        user_id = query.from_user.id
+        files = self.user_sessions[user_id]['files']
+        
+        if not files:
+            message = "📭 No files received yet.\n\nSend me some files to get started!"
+        else:
+            file_list = "\n".join([f"• {f['name']} ({utils.format_file_size(f['size'])})" for f in files])
+            total_size = sum(f['size'] for f in files)
+            message = f"""
+📋 **Your Files** ({len(files)} files, {utils.format_file_size(total_size)} total)
 
+{file_list}
+
+Ready to create an archive?
+            """
+        
+        await query.edit_message_text(
+            message,
+            parse_mode='Markdown',
+            reply_markup=self.get_main_keyboard()
+        )
+    
+    async def handle_clear_files(self, query):
+        """Clear all stored files"""
+        user_id = query.from_user.id
+        
+        # Clean up temporary files
+        if user_id in self.user_sessions:
+            temp_dir = self.user_sessions[user_id]['temp_dir']
+            if os.path.exists(temp_dir):
+                import shutil
+                shutil.rmtree(temp_dir)
+        
+        # Reinitialize session
+        self.initialize_user_session(user_id)
+        
+        await query.edit_message_text(
+            "✅ All files cleared!",
+            reply_markup=self.get_main_keyboard()
+        )
+    
+    async def handle_show_help(self, query):
+        """Show help information"""
+        help_message = f"""
+🤖 **File Compilation Bot - Help**
+
+**How to use:**
+1. Send me files (documents, images, etc.)
+2. Use the buttons to manage your files
+3. Create ZIP or 7Z archives
+4. Download your compiled archive!
+
+**Supported file types:**
+• Documents (PDF, DOC, TXT, etc.)
+• Images (JPG, PNG, etc.)
+• Videos (MP4, AVI, etc.)
+• Other file types
+
+**Archive Support:**
+• Create: ZIP, 7Z, TAR, TAR.GZ
+• Extract: APK, ZIP, 7Z, TAR, TAR.GZ
+
+**Limits:**
+• Max file size: {utils.format_file_size(config.MAX_FILE_SIZE)}
+• Max files per user: {config.MAX_FILES_PER_USER}
+
+**Commands:**
+/start - Restart the bot and show main menu
+        """
+        
+        await query.edit_message_text(
+            help_message,
+            parse_mode='Markdown',
+            reply_markup=self.get_back_keyboard()
+        )
+    
+    async def handle_back_to_main(self, query):
+        """Return to main menu"""
+        user_id = query.from_user.id
+        files_count = len(self.user_sessions[user_id]['files'])
+        
+        message = f"""
+🤖 **File Compilation Bot**
+
+📊 **Status:** {files_count} file(s) stored
+
+Use the buttons below to manage your files!
+        """
+        
+        await query.edit_message_text(
+            message,
+            parse_mode='Markdown',
+            reply_markup=self.get_main_keyboard()
+        )
+    
     async def handle_file(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         """Handle incoming files."""
         user_id = update.effective_user.id
@@ -434,9 +528,9 @@ Use "Extract All Archives" to extract all of these at once!
         user_session = self.user_sessions[user_id]
         
         # Check file limit
-        if len(user_session['files']) >= Config.MAX_FILES_PER_USER:
+        if len(user_session['files']) >= config.MAX_FILES_PER_USER:
             await update.message.reply_text(
-                f"❌ Maximum file limit reached ({Config.MAX_FILES_PER_USER} files). "
+                f"❌ Maximum file limit reached ({config.MAX_FILES_PER_USER} files). "
                 "Please create an archive or clear some files.",
                 reply_markup=self.get_main_keyboard()
             )
@@ -449,7 +543,7 @@ Use "Extract All Archives" to extract all of these at once!
         
         if update.message.document:
             file_obj = await update.message.document.get_file()
-            file_name = safe_filename(update.message.document.file_name or "document")
+            file_name = utils.safe_filename(update.message.document.file_name or "document")
             file_size = update.message.document.file_size or 0
         elif update.message.photo:
             file_obj = await update.message.photo[-1].get_file()
@@ -457,11 +551,11 @@ Use "Extract All Archives" to extract all of these at once!
             file_size = file_obj.file_size or 0
         elif update.message.video:
             file_obj = await update.message.video.get_file()
-            file_name = safe_filename(update.message.video.file_name or f"video_{len(user_session['files']) + 1}.mp4")
+            file_name = utils.safe_filename(update.message.video.file_name or f"video_{len(user_session['files']) + 1}.mp4")
             file_size = update.message.video.file_size or 0
         elif update.message.audio:
             file_obj = await update.message.audio.get_file()
-            file_name = safe_filename(update.message.audio.file_name or f"audio_{len(user_session['files']) + 1}.mp3")
+            file_name = utils.safe_filename(update.message.audio.file_name or f"audio_{len(user_session['files']) + 1}.mp3")
             file_size = update.message.audio.file_size or 0
         else:
             await update.message.reply_text(
@@ -471,9 +565,9 @@ Use "Extract All Archives" to extract all of these at once!
             return
         
         # Check file size
-        if file_size > Config.MAX_FILE_SIZE:
+        if file_size > config.MAX_FILE_SIZE:
             await update.message.reply_text(
-                f"❌ File too large. Maximum size is {format_file_size(Config.MAX_FILE_SIZE)}",
+                f"❌ File too large. Maximum size is {utils.format_file_size(config.MAX_FILE_SIZE)}",
                 reply_markup=self.get_main_keyboard()
             )
             return
@@ -506,15 +600,15 @@ Use "Extract All Archives" to extract all of these at once!
             
             files_count = len(user_session['files'])
             file_type_icon = "📁"
-            if ArchiveManager.is_archive_file(file_name):
+            if archive_manager.ArchiveManager.is_archive_file(file_name):
                 file_type_icon = "📦"
             
             message = (
-                f"{file_type_icon} File '{file_name}' received! ({format_file_size(actual_size)})\n\n"
-                f"📊 Total files: {files_count}/{Config.MAX_FILES_PER_USER}"
+                f"{file_type_icon} File '{file_name}' received! ({utils.format_file_size(actual_size)})\n\n"
+                f"📊 Total files: {files_count}/{config.MAX_FILES_PER_USER}"
             )
             
-            if ArchiveManager.can_extract_archive(file_name):
+            if archive_manager.ArchiveManager.can_extract_archive(file_name):
                 message += "\n\n🔓 This appears to be an archive file! You can extract it using the extraction menu."
             
             await update.message.reply_text(
@@ -528,3 +622,18 @@ Use "Extract All Archives" to extract all of these at once!
                 "❌ Error downloading file. Please try again.",
                 reply_markup=self.get_main_keyboard()
             )
+    
+    async def error_handler(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        """Handle errors."""
+        logger.error(f"Exception while handling an update: {context.error}")
+        
+        # Send error message to user
+        if update and update.effective_user:
+            try:
+                await context.bot.send_message(
+                    chat_id=update.effective_user.id,
+                    text="❌ An error occurred. Please try again.",
+                    reply_markup=self.get_main_keyboard()
+                )
+            except Exception:
+                pass
