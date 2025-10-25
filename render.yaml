@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: telegram-file-compiler-bot
+    env: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: python run.py
+    envVars:
+      - key: BOT_TOKEN
+        sync: false
+      - key: MAX_FILE_SIZE
+        value: "52428800"
+      - key: MAX_FILES_PER_USER
+        value: "20"
+      - key: LOG_LEVEL
+        value: "INFO"
