@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Bot Token from @BotFather
-BOT_TOKEN = os.getenv('BOT_TOKEN', "7870275570:AAF-gKYC3N7W586IBBFpe3gBmiF_xsgLVwQ")
+BOT_TOKEN = os.getenv('BOT_TOKEN', "your_bot_token_here")
 
 # Optional: Admin user IDs (for special features)
 ADMIN_IDS = [7475473197, 7713987088]
