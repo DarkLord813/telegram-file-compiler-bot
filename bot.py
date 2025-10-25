@@ -639,7 +639,7 @@ Use the buttons below to manage your files!
                 pass
 
     def run(self):
-        """Run the bot"""
+        """Run the bot in polling mode (for development)"""
         from telegram.ext import Application
         
         # Create application
@@ -652,5 +652,34 @@ Use the buttons below to manage your files!
         application.add_error_handler(self.error_handler)
         
         # Start the bot
-        print("✅ Bot is running successfully!")
+        print("✅ Bot is running successfully in POLLING mode!")
         application.run_polling(drop_pending_updates=True)
+
+    def run_webhook(self, webhook_url=None, port=10000):
+        """Run the bot in webhook mode (for production on Render)"""
+        from telegram.ext import Application
+        
+        # Create application
+        application = Application.builder().token(config.BOT_TOKEN).build()
+        
+        # Add handlers
+        application.add_handler(CommandHandler("start", self.start))
+        application.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, self.handle_file))
+        application.add_handler(CallbackQueryHandler(self.handle_callback))
+        application.add_error_handler(self.error_handler)
+        
+        # Set webhook
+        if webhook_url:
+            application.bot.set_webhook(webhook_url)
+            print(f"✅ Webhook set to: {webhook_url}")
+        
+        # Start webhook
+        print("🚀 Starting bot in WEBHOOK mode...")
+        application.run_webhook(
+            listen="0.0.0.0",
+            port=port,
+            url_path=config.BOT_TOKEN,
+            webhook_url=webhook_url,
+            secret_token='WEBHOOK_SECRET'
+        )
+        print("✅ Bot is running successfully with webhooks!")
