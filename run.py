@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """
-Telegram File Compiler Bot - Main Entry Point
+Telegram File Compiler Bot - Main Entry Point (Render Optimized)
 """
 
 import logging
+import os
 from bot import FileCompilationBot
 import config
 import utils
@@ -20,28 +21,24 @@ def main():
         # Create bot instance
         bot = FileCompilationBot()
         
-        # Create application
-        from telegram.ext import Application
-        application = Application.builder().token(config.BOT_TOKEN).build()
-        
-        # Add handlers
-        application.add_handler(CommandHandler("start", bot.start))
-        application.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, bot.handle_file))
-        application.add_handler(CallbackQueryHandler(bot.handle_callback))
-        application.add_error_handler(bot.error_handler)
-        
-        # Start the bot
-        print("🤖 Telegram File Compiler Bot is starting...")
+        # Create and run the bot
+        print("🚀 Starting Telegram File Compiler Bot on Render...")
         print("📦 Supports: ZIP, 7Z, TAR, TAR.GZ compilation")
         print("📁 Supports: APK, ZIP, 7Z, TAR extraction")
-        print("🚀 Press Ctrl+C to stop the bot")
+        print("🌐 Webhook ready for production")
         
-        application.run_polling()
+        # Check if we're in production (Render sets RENDER env var)
+        if os.environ.get('RENDER'):
+            print("🏭 Running in Render production environment")
+            bot.run_webhook()
+        else:
+            print("🔧 Running in development mode (polling)")
+            bot.run()
         
     except Exception as e:
         logging.error(f"Failed to start bot: {e}")
-        print(f"Error: {e}")
-        print("Please check your configuration in config.py")
+        print(f"❌ Error: {e}")
+        print("💡 Make sure you've set the BOT_TOKEN environment variable in Render")
 
 if __name__ == "__main__":
     main()
