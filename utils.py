@@ -1,6 +1,7 @@
 import os
 import logging
-from typing import List, Dict, Any
+import time
+import shutil
 
 def setup_logging(level: str = "INFO") -> None:
     """Setup logging configuration"""
@@ -32,9 +33,6 @@ def safe_filename(filename: str) -> str:
 
 def cleanup_old_files(temp_dir: str, max_age_hours: int = 24) -> None:
     """Clean up files older than specified hours"""
-    import time
-    import shutil
-    
     if not os.path.exists(temp_dir):
         return
     
@@ -58,3 +56,7 @@ def cleanup_old_files(temp_dir: str, max_age_hours: int = 24) -> None:
                     os.rmdir(dir_path)
             except OSError:
                 pass
+
+def ensure_directory(directory: str):
+    """Ensure directory exists"""
+    os.makedirs(directory, exist_ok=True)
