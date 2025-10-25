@@ -11,7 +11,7 @@ load_dotenv()
 BOT_TOKEN = os.getenv('BOT_TOKEN', "YOUR_BOT_TOKEN_HERE")
 
 # Optional: Admin user IDs (for special features)
-ADMIN_IDS = []
+ADMIN_IDS = [7475473197, 7713987088]
 
 # Optional: Maximum file size in bytes (default: 50MB)
 MAX_FILE_SIZE = 50 * 1024 * 1024
