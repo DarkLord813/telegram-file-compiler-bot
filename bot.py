@@ -637,3 +637,20 @@ Use the buttons below to manage your files!
                 )
             except Exception:
                 pass
+
+    def run(self):
+        """Run the bot"""
+        from telegram.ext import Application
+        
+        # Create application
+        application = Application.builder().token(config.BOT_TOKEN).build()
+        
+        # Add handlers
+        application.add_handler(CommandHandler("start", self.start))
+        application.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, self.handle_file))
+        application.add_handler(CallbackQueryHandler(self.handle_callback))
+        application.add_error_handler(self.error_handler)
+        
+        # Start the bot
+        print("✅ Bot is running successfully!")
+        application.run_polling(drop_pending_updates=True)
