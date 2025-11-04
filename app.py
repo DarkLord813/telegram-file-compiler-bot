@@ -21,7 +21,8 @@ def main():
     port = int(os.environ.get('PORT', 10000))
     
     if not bot_token:
-        raise ValueError("BOT_TOKEN environment variable is required!")
+        print("❌ ERROR: BOT_TOKEN environment variable is required!")
+        return
     
     if not webhook_url:
         # Try to construct webhook URL from Render environment
@@ -29,21 +30,26 @@ def main():
         if render_app_name:
             webhook_url = f"https://{render_app_name}.onrender.com"
         else:
-            raise ValueError("WEBHOOK_URL environment variable is required!")
+            print("❌ ERROR: WEBHOOK_URL environment variable is required!")
+            return
     
     print(f"🚀 Starting File Compilation Bot...")
     print(f"📊 Webhook URL: {webhook_url}")
     print(f"🔑 Bot Token: {bot_token[:10]}...")
     print(f"🌐 Port: {port}")
     
-    # Create and run bot
-    bot = FileCompilationBot()
-    
-    # Run in webhook mode for production
-    bot.run_webhook(
-        webhook_url=webhook_url,
-        port=port
-    )
+    try:
+        # Create and run bot
+        bot = FileCompilationBot()
+        
+        # Run in webhook mode for production
+        bot.run_webhook(
+            webhook_url=webhook_url,
+            port=port
+        )
+    except Exception as e:
+        print(f"❌ Failed to start bot: {e}")
+        raise
 
 if __name__ == '__main__':
     main()
