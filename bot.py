@@ -679,7 +679,6 @@ Use the buttons below to manage your files!
             listen="0.0.0.0",
             port=port,
             url_path=config.BOT_TOKEN,
-            webhook_url=webhook_url,
-            secret_token='WEBHOOK_SECRET'
+            webhook_url=webhook_url
         )
         print("✅ Bot is running successfully with webhooks!")
