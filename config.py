@@ -23,4 +23,4 @@ EXTRACTABLE_ARCHIVES = {
     'apk', 'zip', '7z', 'tar', 'tar.gz', 'gz'
 }
 
-# No validate_config function - remove it to fix the error
+# Remove validate_config function - it doesn't exist
