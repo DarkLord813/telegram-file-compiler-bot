@@ -1,184 +1,155 @@
 import os
-import zipfile
+import asyncio
+from patoolib import extract_archive, test_archive
 import py7zr
+import zipfile
 import tarfile
-import logging
-from typing import List, Dict, Any
-
-logger = logging.getLogger(__name__)
 
 class ArchiveManager:
-    """Manages compilation and extraction of various archive formats"""
+    @staticmethod
+    def get_supported_formats():
+        """Get supported archive formats for creation"""
+        return {
+            'zip': 'ZIP Archive',
+            '7z': '7-Zip Archive',
+            'tar': 'TAR Archive',
+            'tar.gz': 'GZipped TAR'
+        }
     
     @staticmethod
-    async def compile_archive(files: List[Dict], output_path: str, format_type: str) -> bool:
-        """Compile files into specified archive format"""
+    def can_extract_archive(filename):
+        """Check if file can be extracted"""
+        extractable_extensions = {'.apk', '.zip', '.7z', '.tar', '.gz', '.tar.gz', '.rar'}
+        file_ext = os.path.splitext(filename.lower())[1]
+        return file_ext in extractable_extensions
+    
+    @staticmethod
+    def is_archive_file(filename):
+        """Check if file is an archive"""
+        archive_extensions = {'.zip', '.7z', '.tar', '.gz', '.tar.gz', '.rar', '.apk'}
+        file_ext = os.path.splitext(filename.lower())[1]
+        return file_ext in archive_extensions
+    
+    @staticmethod
+    async def compile_archive(files, output_path, format_type):
+        """Compile files into an archive"""
         try:
-            if format_type == "zip":
-                return ArchiveManager._create_zip(files, output_path)
-            elif format_type == "7z":
-                return ArchiveManager._create_7z(files, output_path)
-            elif format_type == "tar":
-                return ArchiveManager._create_tar(files, output_path)
-            elif format_type == "tar.gz":
-                return ArchiveManager._create_tar_gz(files, output_path)
+            if format_type == 'zip':
+                return await ArchiveManager._create_zip(files, output_path)
+            elif format_type == '7z':
+                return await ArchiveManager._create_7z(files, output_path)
+            elif format_type == 'tar':
+                return await ArchiveManager._create_tar(files, output_path)
+            elif format_type == 'tar.gz':
+                return await ArchiveManager._create_tar_gz(files, output_path)
             else:
-                logger.error(f"Unsupported archive format: {format_type}")
                 return False
         except Exception as e:
-            logger.error(f"Error creating {format_type} archive: {e}")
+            print(f"Error creating archive: {e}")
             return False
     
     @staticmethod
-    def _create_zip(files: List[Dict], output_path: str) -> bool:
+    async def _create_zip(files, output_path):
         """Create ZIP archive"""
         try:
-            with zipfile.ZipFile(output_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+            with zipfile.ZipFile(output_path, 'w') as zipf:
                 for file_info in files:
-                    zipf.write(file_info['path'], file_info['name'])
+                    arcname = os.path.basename(file_info['path'])
+                    zipf.write(file_info['path'], arcname)
             return True
         except Exception as e:
-            logger.error(f"Error creating ZIP: {e}")
+            print(f"Error creating ZIP: {e}")
             return False
     
     @staticmethod
-    def _create_7z(files: List[Dict], output_path: str) -> bool:
+    async def _create_7z(files, output_path):
         """Create 7Z archive"""
         try:
-            with py7zr.SevenZipFile(output_path, 'w') as sevenzf:
+            with py7zr.SevenZipFile(output_path, 'w') as archive:
                 for file_info in files:
-                    sevenzf.write(file_info['path'], file_info['name'])
+                    archive.write(file_info['path'], os.path.basename(file_info['path']))
             return True
         except Exception as e:
-            logger.error(f"Error creating 7Z: {e}")
+            print(f"Error creating 7Z: {e}")
             return False
     
     @staticmethod
-    def _create_tar(files: List[Dict], output_path: str) -> bool:
+    async def _create_tar(files, output_path):
         """Create TAR archive"""
         try:
             with tarfile.open(output_path, 'w') as tar:
                 for file_info in files:
-                    tar.add(file_info['path'], arcname=file_info['name'])
+                    tar.add(file_info['path'], arcname=os.path.basename(file_info['path']))
             return True
         except Exception as e:
-            logger.error(f"Error creating TAR: {e}")
+            print(f"Error creating TAR: {e}")
             return False
     
     @staticmethod
-    def _create_tar_gz(files: List[Dict], output_path: str) -> bool:
+    async def _create_tar_gz(files, output_path):
         """Create TAR.GZ archive"""
         try:
             with tarfile.open(output_path, 'w:gz') as tar:
                 for file_info in files:
-                    tar.add(file_info['path'], arcname=file_info['name'])
+                    tar.add(file_info['path'], arcname=os.path.basename(file_info['path']))
             return True
         except Exception as e:
-            logger.error(f"Error creating TAR.GZ: {e}")
+            print(f"Error creating TAR.GZ: {e}")
             return False
     
     @staticmethod
-    async def extract_archive(archive_path: str, extract_dir: str) -> List[Dict]:
-        """Extract files from various archive formats"""
+    async def extract_archive(archive_path, extract_dir):
+        """Extract archive files"""
         try:
-            extracted_files = []
-            
-            if archive_path.endswith('.zip'):
-                extracted_files = ArchiveManager._extract_zip(archive_path, extract_dir)
-            elif archive_path.endswith('.7z'):
-                extracted_files = ArchiveManager._extract_7z(archive_path, extract_dir)
-            elif archive_path.endswith('.tar'):
-                extracted_files = ArchiveManager._extract_tar(archive_path, extract_dir)
-            elif archive_path.endswith('.tar.gz') or archive_path.endswith('.tgz'):
-                extracted_files = ArchiveManager._extract_tar_gz(archive_path, extract_dir)
-            elif archive_path.endswith('.apk'):
-                # APK is basically a ZIP file
-                extracted_files = ArchiveManager._extract_zip(archive_path, extract_dir)
+            if archive_path.lower().endswith('.7z'):
+                return await ArchiveManager._extract_7z(archive_path, extract_dir)
             else:
-                logger.error(f"Unsupported archive format: {archive_path}")
-                return []
-            
-            return extracted_files
+                return await ArchiveManager._extract_generic(archive_path, extract_dir)
         except Exception as e:
-            logger.error(f"Error extracting archive: {e}")
+            print(f"Error extracting archive: {e}")
             return []
     
     @staticmethod
-    def _extract_zip(archive_path: str, extract_dir: str) -> List[Dict]:
-        """Extract ZIP archive"""
-        extracted_files = []
-        with zipfile.ZipFile(archive_path, 'r') as zipf:
-            zipf.extractall(extract_dir)
-            for file_info in zipf.infolist():
-                if not file_info.is_dir():
-                    file_path = os.path.join(extract_dir, file_info.filename)
-                    extracted_files.append({
-                        'name': file_info.filename,
-                        'path': file_path,
-                        'size': file_info.file_size
-                    })
-        return extracted_files
-    
-    @staticmethod
-    def _extract_7z(archive_path: str, extract_dir: str) -> List[Dict]:
+    async def _extract_7z(archive_path, extract_dir):
         """Extract 7Z archive"""
-        extracted_files = []
-        with py7zr.SevenZipFile(archive_path, 'r') as sevenzf:
-            sevenzf.extractall(extract_dir)
-            for file_info in sevenzf.list():
-                if not file_info.is_directory:
-                    file_path = os.path.join(extract_dir, file_info.filename)
+        try:
+            with py7zr.SevenZipFile(archive_path, 'r') as archive:
+                archive.extractall(extract_dir)
+            
+            # Get list of extracted files
+            extracted_files = []
+            for root, dirs, files in os.walk(extract_dir):
+                for file in files:
+                    file_path = os.path.join(root, file)
                     extracted_files.append({
-                        'name': file_info.filename,
+                        'name': file,
                         'path': file_path,
-                        'size': file_info.compressed
+                        'size': os.path.getsize(file_path)
                     })
-        return extracted_files
+            
+            return extracted_files
+        except Exception as e:
+            print(f"Error extracting 7Z: {e}")
+            return []
     
     @staticmethod
-    def _extract_tar(archive_path: str, extract_dir: str) -> List[Dict]:
-        """Extract TAR archive"""
-        extracted_files = []
-        with tarfile.open(archive_path, 'r') as tar:
-            tar.extractall(extract_dir)
-            for member in tar.getmembers():
-                if member.isfile():
-                    file_path = os.path.join(extract_dir, member.name)
+    async def _extract_generic(archive_path, extract_dir):
+        """Extract generic archive using patool"""
+        try:
+            extract_archive(archive_path, outdir=extract_dir)
+            
+            # Get list of extracted files
+            extracted_files = []
+            for root, dirs, files in os.walk(extract_dir):
+                for file in files:
+                    file_path = os.path.join(root, file)
                     extracted_files.append({
-                        'name': member.name,
+                        'name': file,
                         'path': file_path,
-                        'size': member.size
+                        'size': os.path.getsize(file_path)
                     })
-        return extracted_files
-    
-    @staticmethod
-    def _extract_tar_gz(archive_path: str, extract_dir: str) -> List[Dict]:
-        """Extract TAR.GZ archive"""
-        return ArchiveManager._extract_tar(archive_path, extract_dir)
-    
-    @staticmethod
-    def get_supported_formats() -> Dict[str, str]:
-        """Get supported archive formats with descriptions"""
-        return {
-            'zip': 'ZIP Archive (Universal)',
-            '7z': '7-Zip Archive (High Compression)',
-            'tar': 'TAR Archive (Unix)',
-            'tar.gz': 'GZipped TAR Archive'
-        }
-    
-    @staticmethod
-    def is_archive_file(filename: str) -> bool:
-        """Check if file is a supported archive format"""
-        archive_extensions = {
-            '.zip', '.7z', '.tar', '.tar.gz', '.tgz', 
-            '.rar', '.apk', '.jar', '.war', '.ear'
-        }
-        return any(filename.lower().endswith(ext) for ext in archive_extensions)
-    
-    @staticmethod
-    def can_extract_archive(filename: str) -> bool:
-        """Check if we can extract this archive format"""
-        extractable_extensions = {
-            '.zip', '.7z', '.tar', '.tar.gz', '.tgz', '.apk'
-        }
-        return any(filename.lower().endswith(ext) for ext in extractable_extensions)
+            
+            return extracted_files
+        except Exception as e:
+            print(f"Error extracting generic archive: {e}")
+            return []
