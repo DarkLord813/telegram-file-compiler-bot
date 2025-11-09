@@ -349,33 +349,33 @@ Use the buttons below to manage your files!
             self.initialize_user_session(user_id)
         
         if data == "show_archive_options":
-            await self.handle_show_archive_options(query)
+            await self.show_archive_options(query)
         elif data.startswith("create_"):
             format_type = data.replace("create_", "")
-            await self.handle_create_archive(query, format_type)
+            await self.create_archive_request(query, format_type)
         elif data == "show_extract_options":
-            await self.handle_show_extract_options(query)
+            await self.show_extract_options(query)
         elif data == "extract_all":
-            await self.handle_extract_all(query)
+            await self.extract_all_request(query)
         elif data == "list_extractable":
-            await self.handle_list_extractable(query)
+            await self.list_extractable_files(query)
         elif data == "list_files":
-            await self.handle_list_files(query)
+            await self.list_user_files(query)
         elif data == "clear_files":
-            await self.handle_clear_files(query)
+            await self.clear_user_files(query)
         elif data == "show_help":
-            await self.handle_show_help(query)
+            await self.show_help_info(query)
         elif data.startswith("confirm_"):
             if data.startswith("confirm_extract"):
-                await self.handle_confirm_extraction(query, data.replace("confirm_", ""))
+                await self.confirm_extraction(query, data.replace("confirm_", ""))
             else:
-                await self.handle_confirm_creation(query, data.replace("confirm_", ""))
+                await self.confirm_creation(query, data.replace("confirm_", ""))
         elif data in ["cancel_creation", "cancel_extraction"]:
-            await self.handle_cancel_operation(query)
+            await self.cancel_operation(query)
         elif data == "back_to_main":
-            await self.handle_back_to_main(query)
+            await self.back_to_main(query)
     
-    async def handle_show_archive_options(self, query):
+    async def show_archive_options(self, query):
         """Show available archive formats"""
         supported_formats = ArchiveManager.get_supported_formats()
         formats_text = "\n".join([f"• **{key.upper()}** - {desc}" for key, desc in supported_formats.items()])
@@ -394,7 +394,7 @@ Choose a format to create your archive:
             reply_markup=self.get_archive_format_keyboard()
         )
     
-    async def handle_show_extract_options(self, query):
+    async def show_extract_options(self, query):
         """Show extraction options"""
         user_id = query.from_user.id
         archive_files = [f for f in self.user_sessions[user_id]['files'] 
@@ -417,7 +417,7 @@ You can:
             reply_markup=self.get_extract_keyboard()
         )
     
-    async def handle_create_archive(self, query, format_type):
+    async def create_archive_request(self, query, format_type):
         """Handle archive creation request"""
         user_id = query.from_user.id
         files = self.user_sessions[user_id]['files']
@@ -451,7 +451,7 @@ Are you sure you want to create the {format_type.upper()} archive?
             reply_markup=self.get_confirm_keyboard("create_archive", format_type)
         )
     
-    async def handle_extract_all(self, query):
+    async def extract_all_request(self, query):
         """Handle extract all archives request"""
         user_id = query.from_user.id
         archive_files = [f for f in self.user_sessions[user_id]['files'] 
@@ -482,7 +482,7 @@ Continue?
             reply_markup=self.get_confirm_keyboard("extract_all")
         )
     
-    async def handle_list_extractable(self, query):
+    async def list_extractable_files(self, query):
         """List extractable archive files"""
         user_id = query.from_user.id
         archive_files = [f for f in self.user_sessions[user_id]['files'] 
@@ -506,7 +506,7 @@ Use "Extract All Archives" to extract all of these at once!
             reply_markup=self.get_extract_keyboard()
         )
     
-    async def handle_confirm_creation(self, query, format_type):
+    async def confirm_creation(self, query, format_type):
         """Handle confirmed archive creation"""
         user_id = query.from_user.id
         user_session = self.user_sessions[user_id]
@@ -514,7 +514,7 @@ Use "Extract All Archives" to extract all of these at once!
         await query.edit_message_text(f"⏳ Creating {format_type.upper()} archive... Please wait.")
         
         try:
-            archive_path = await self.create_archive(user_id, format_type)
+            archive_path = await self.create_archive_file(user_id, format_type)
             
             if archive_path:
                 # Send the archive file
@@ -545,7 +545,7 @@ Use "Extract All Archives" to extract all of these at once!
                 reply_markup=self.get_main_keyboard()
             )
     
-    async def handle_confirm_extraction(self, query, action):
+    async def confirm_extraction(self, query, action):
         """Handle confirmed archive extraction"""
         user_id = query.from_user.id
         user_session = self.user_sessions[user_id]
@@ -553,7 +553,7 @@ Use "Extract All Archives" to extract all of these at once!
         await query.edit_message_text("⏳ Extracting archives... Please wait.")
         
         try:
-            extracted_count = await self.extract_all_archives(user_id)
+            extracted_count = await self.extract_user_archives(user_id)
             
             if extracted_count > 0:
                 total_files = len(user_session['files'])
@@ -575,7 +575,7 @@ Use "Extract All Archives" to extract all of these at once!
                 reply_markup=self.get_main_keyboard()
             )
     
-    async def handle_cancel_operation(self, query):
+    async def cancel_operation(self, query):
         """Cancel any pending operation"""
         user_id = query.from_user.id
         self.user_sessions[user_id]['waiting_confirmation'] = None
@@ -585,7 +585,7 @@ Use "Extract All Archives" to extract all of these at once!
             reply_markup=self.get_main_keyboard()
         )
     
-    async def create_archive(self, user_id: int, format_type: str) -> str:
+    async def create_archive_file(self, user_id: int, format_type: str) -> str:
         """Create archive from user's files"""
         user_session = self.user_sessions[user_id]
         files = user_session['files']
@@ -600,7 +600,7 @@ Use "Extract All Archives" to extract all of these at once!
         success = await ArchiveManager.compile_archive(files, archive_path, format_type)
         return archive_path if success else None
     
-    async def extract_all_archives(self, user_id: int) -> int:
+    async def extract_user_archives(self, user_id: int) -> int:
         """Extract all supported archives for a user"""
         user_session = self.user_sessions[user_id]
         files = user_session['files']
@@ -637,7 +637,7 @@ Use "Extract All Archives" to extract all of these at once!
         
         return total_extracted
 
-    async def handle_list_files(self, query):
+    async def list_user_files(self, query):
         """List all stored files"""
         user_id = query.from_user.id
         files = self.user_sessions[user_id]['files']
@@ -661,7 +661,7 @@ Ready to create an archive?
             reply_markup=self.get_main_keyboard()
         )
     
-    async def handle_clear_files(self, query):
+    async def clear_user_files(self, query):
         """Clear all stored files"""
         user_id = query.from_user.id
         
@@ -679,7 +679,7 @@ Ready to create an archive?
             reply_markup=self.get_main_keyboard()
         )
     
-    async def handle_show_help(self, query):
+    async def show_help_info(self, query):
         """Show help information"""
         help_message = f"""
 🤖 **File Compilation Bot - Help**
@@ -714,7 +714,7 @@ Ready to create an archive?
             reply_markup=self.get_back_keyboard()
         )
     
-    async def handle_back_to_main(self, query):
+    async def back_to_main(self, query):
         """Return to main menu"""
         user_id = query.from_user.id
         files_count = len(self.user_sessions[user_id]['files'])
@@ -900,8 +900,6 @@ async def run_webhook(port=10000):
     print("✅ Bot application started!")
     
     # We'll keep the bot running indefinitely
-    # In a real deployment, you might want to use a web framework like Flask
-    # But for simplicity, we'll just wait
     print("🔄 Bot is now running and waiting for updates...")
     
     # Keep the application running
