@@ -1,8 +1,3 @@
-#!/usr/bin/env python3
-"""
-Complete File Compilation Bot - Single File Solution
-Fixed for python-telegram-bot v21.0+
-"""
 import os
 import logging
 import asyncio
