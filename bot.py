@@ -1,3 +1,8 @@
+#!/usr/bin/env python3
+"""
+Complete File Compilation Bot - Single File Solution
+Fixed for python-telegram-bot v21.0+
+"""
 import os
 import logging
 import asyncio
@@ -49,7 +54,10 @@ class Utils:
             if os.path.isfile(file_path):
                 file_age = current_time - os.path.getctime(file_path)
                 if file_age > max_age_hours * 3600:
-                    os.remove(file_path)
+                    try:
+                        os.remove(file_path)
+                    except:
+                        pass
 
     @staticmethod
     def format_file_size(size_bytes):
@@ -96,10 +104,6 @@ class ArchiveManager:
     async def compile_archive(files, output_path, format_type):
         """Compile files into an archive"""
         try:
-            import zipfile
-            import tarfile
-            import py7zr
-            
             if format_type == 'zip':
                 return await ArchiveManager._create_zip(files, output_path)
             elif format_type == '7z':
@@ -855,54 +859,62 @@ Use the buttons below to manage your files!
             except Exception:
                 pass
 
-    def run_polling(self):
-        """Run the bot in polling mode (for development)"""
-        # Create application
-        application = Application.builder().token(Config.BOT_TOKEN).build()
-        
-        # Add handlers
-        application.add_handler(CommandHandler("start", self.start))
-        application.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, self.handle_file))
-        application.add_handler(CallbackQueryHandler(self.handle_callback))
-        application.add_error_handler(self.error_handler)
-        
-        # Start the bot
-        print("✅ Bot is running successfully in POLLING mode!")
-        application.run_polling(drop_pending_updates=True)
+# ===== APPLICATION SETUP =====
+async def setup_application():
+    """Setup and return the application with all handlers"""
+    application = Application.builder().token(Config.BOT_TOKEN).build()
+    
+    bot = FileCompilationBot()
+    
+    # Add handlers
+    application.add_handler(CommandHandler("start", bot.start))
+    application.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, bot.handle_file))
+    application.add_handler(CallbackQueryHandler(bot.handle_callback))
+    application.add_error_handler(bot.error_handler)
+    
+    return application, bot
 
-    def run_webhook(self, webhook_url=None, port=10000):
-        """Run the bot in webhook mode (for production on Render)"""
-        # Create application
-        application = Application.builder().token(Config.BOT_TOKEN).build()
-        
-        # Add handlers
-        application.add_handler(CommandHandler("start", self.start))
-        application.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, self.handle_file))
-        application.add_handler(CallbackQueryHandler(self.handle_callback))
-        application.add_error_handler(self.error_handler)
-        
-        # Auto-detect webhook URL if not provided
-        if not webhook_url:
-            service_name = os.environ.get('RENDER_SERVICE_NAME', 'file-compilation-bot')
-            webhook_url = f"https://{service_name}.onrender.com"
-        
-        # Set webhook
-        application.bot.set_webhook(webhook_url)
-        print(f"✅ Webhook set to: {webhook_url}")
-        
-        # Start webhook
-        print("🚀 Starting bot in WEBHOOK mode...")
-        application.run_webhook(
-            listen="0.0.0.0",
-            port=port,
-            url_path=Config.BOT_TOKEN,
-            webhook_url=webhook_url
-        )
-        print("✅ Bot is running successfully with webhooks!")
+async def run_polling():
+    """Run the bot in polling mode (for development)"""
+    application, _ = await setup_application()
+    
+    print("✅ Bot is running successfully in POLLING mode!")
+    await application.run_polling(drop_pending_updates=True)
+
+async def run_webhook(port=10000):
+    """Run the bot in webhook mode (for production on Render)"""
+    application, _ = await setup_application()
+    
+    # Auto-detect webhook URL
+    service_name = os.environ.get('RENDER_SERVICE_NAME', 'file-compilation-bot')
+    webhook_url = f"https://{service_name}.onrender.com"
+    
+    # Set webhook
+    await application.bot.set_webhook(
+        url=f"{webhook_url}/{Config.BOT_TOKEN}",
+        drop_pending_updates=True
+    )
+    print(f"✅ Webhook set to: {webhook_url}/{Config.BOT_TOKEN}")
+    
+    # Start webhook
+    print("🚀 Starting bot in WEBHOOK mode...")
+    
+    # For webhook, we need to keep the application running
+    # In production environments like Render, we'll use the port provided
+    await application.start()
+    print("✅ Bot application started!")
+    
+    # We'll keep the bot running indefinitely
+    # In a real deployment, you might want to use a web framework like Flask
+    # But for simplicity, we'll just wait
+    print("🔄 Bot is now running and waiting for updates...")
+    
+    # Keep the application running
+    await asyncio.Event().wait()
 
 # ===== MAIN ENTRY POINT =====
-def main():
-    """Main function to start the bot"""
+async def main():
+    """Main async function to start the bot"""
     import sys
     
     # Set up logging
@@ -921,26 +933,24 @@ def main():
         sys.exit(1)
     
     # Auto-detect if we're in production (Render) or development
-    is_production = os.environ.get('RENDER') or os.environ.get('DYNO') or os.environ.get('PORT')
+    is_production = os.environ.get('RENDER') or os.environ.get('PORT')
     
     print(f"🚀 Starting File Compilation Bot...")
     print(f"🔑 Bot Token: {bot_token[:10]}...")
     print(f"🌐 Mode: {'PRODUCTION (Webhook)' if is_production else 'DEVELOPMENT (Polling)'}")
+    print(f"🔧 Port: {port}")
     
     try:
-        # Create and run bot
-        bot = FileCompilationBot()
-        
         if is_production:
             # Run in webhook mode for production
-            bot.run_webhook(port=port)
+            await run_webhook(port=port)
         else:
             # Run in polling mode for development
-            bot.run_polling()
+            await run_polling()
             
     except Exception as e:
         print(f"❌ Failed to start bot: {e}")
         raise
 
 if __name__ == '__main__':
-    main()
+    asyncio.run(main())
